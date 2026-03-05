@@ -19,11 +19,20 @@ interface CallToolResult {
 
 function strategyForContentType(contentType: ContentType): Strategy {
   switch (contentType) {
-    case 'image': return 'passthrough'; // OCR only via explicit whitelist rules — safe for image generation MCP etc.
+    case 'image': return 'ocr';
     case 'dom-snapshot': return 'dom-cleanup';
     case 'large-text': return 'truncate';
     case 'small-text': return 'passthrough';
   }
+}
+
+// File path patterns in text blocks: markdown links, bare paths, URLs to local files
+const FILE_PATH_PATTERN = /(?:]\(|href=["']?|src=["']?)?\/?(?:\/[\w./-]+\.(?:png|jpg|jpeg|gif|webp|svg|bmp|tiff))/i;
+
+function resultHasFilePath(content: ContentBlock[]): boolean {
+  return content.some(
+    (block) => block.type === 'text' && block.text && FILE_PATH_PATTERN.test(block.text),
+  );
 }
 
 function blockTokenEstimate(block: ContentBlock): number {
@@ -88,13 +97,24 @@ export function compressResult(
     return result;
   }
 
+  // For auto strategy: only OCR images if result contains a file path (image is on disk)
+  const hasFilePath = resultHasFilePath(result.content);
+
   // Compress each block
   const compressedContent = result.content.map((block) => {
     try {
+      let blockStrategy = strategy;
+
+      // Auto + image + no file path = passthrough (base64 is the only copy)
+      if (strategy === 'auto' && block.type === 'image' && !hasFilePath) {
+        log(`${toolName}: image has no file path in result, keeping original`);
+        blockStrategy = 'passthrough';
+      }
+
       const effectiveConfig = maxTokens !== config.maxTextTokens
         ? { ...config, maxTextTokens: maxTokens }
         : config;
-      return compressBlock(block, strategy, effectiveConfig);
+      return compressBlock(block, blockStrategy, effectiveConfig);
     } catch (err) {
       logError(`Compressor failed for ${toolName}: ${err}`);
       return block; // fail-safe: return original

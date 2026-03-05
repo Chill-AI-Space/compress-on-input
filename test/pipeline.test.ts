@@ -9,7 +9,6 @@ const baseConfig: Config = {
   verbose: false,
   dryRun: false,
   rules: [
-    { toolName: 'browser_take_screenshot', strategy: 'ocr' },
     { toolName: 'browser_snapshot', strategy: 'dom-cleanup' },
     { toolNamePattern: '.*', strategy: 'auto' },
   ],
@@ -52,11 +51,10 @@ describe('compressResult', () => {
     expect(compressed.content![0].text).toContain('[... truncated');
   });
 
-  it('passes through images for unknown tools (safe for image generation MCP)', () => {
-    const fakeBase64 = 'A'.repeat(5000); // big enough to pass threshold
+  it('passes through images when no file path in result (base64 is only copy)', () => {
+    const fakeBase64 = 'A'.repeat(5000);
     const result = { content: [{ type: 'image', data: fakeBase64, mimeType: 'image/png' }] };
     const compressed = compressResult('generate_image', result, baseConfig);
-    // auto strategy should NOT OCR unknown image tools — passthrough
     expect(compressed.content![0].type).toBe('image');
     expect(compressed.content![0].data).toBe(fakeBase64);
   });

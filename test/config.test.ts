@@ -15,8 +15,8 @@ describe('findRule', () => {
   const config = loadConfig();
 
   it('matches exact tool name', () => {
-    const rule = findRule(config, 'browser_take_screenshot');
-    expect(rule?.strategy).toBe('ocr');
+    const rule = findRule(config, 'browser_snapshot');
+    expect(rule?.strategy).toBe('dom-cleanup');
   });
 
   it('matches pattern for unknown tools', () => {
