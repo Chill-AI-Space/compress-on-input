@@ -3,6 +3,7 @@ import { classifyContent, ContentType, estimateTokens } from './classifier.js';
 import { compressOCR } from './compressors/ocr.js';
 import { compressDomCleanup } from './compressors/dom-cleanup.js';
 import { compressTruncate } from './compressors/truncate.js';
+import { compressJsonCollapse } from './compressors/json-collapse.js';
 import { log, logStats, logError } from './logger.js';
 
 interface ContentBlock {
@@ -21,6 +22,7 @@ function strategyForContentType(contentType: ContentType): Strategy {
   switch (contentType) {
     case 'image': return 'ocr';
     case 'dom-snapshot': return 'dom-cleanup';
+    case 'large-json': return 'json-collapse';
     case 'large-text': return 'truncate';
     case 'small-text': return 'passthrough';
   }
@@ -55,6 +57,8 @@ function compressBlock(
       return compressOCR(block, config.ocrEngine);
     case 'dom-cleanup':
       return compressDomCleanup(block);
+    case 'json-collapse':
+      return compressJsonCollapse(block, config.maxTextTokens);
     case 'truncate':
       return compressTruncate(block, config.maxTextTokens);
     case 'passthrough':

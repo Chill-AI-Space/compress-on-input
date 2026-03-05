@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 
-export type Strategy = 'ocr' | 'dom-cleanup' | 'truncate' | 'auto' | 'passthrough';
+export type Strategy = 'ocr' | 'dom-cleanup' | 'json-collapse' | 'truncate' | 'auto' | 'passthrough';
 
 export interface Rule {
   toolName?: string;

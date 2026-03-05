@@ -1,4 +1,4 @@
-export type ContentType = 'image' | 'dom-snapshot' | 'large-text' | 'small-text';
+export type ContentType = 'image' | 'dom-snapshot' | 'large-json' | 'large-text' | 'small-text';
 
 const DOM_SIGNALS = ['[ref=', '- role:', 'role="', 'aria-'];
 
@@ -25,6 +25,11 @@ export function classifyContent(
 
   const tokens = estimateTokens(text);
   if (tokens > maxTextTokens) {
+    // Check if it's JSON
+    const trimmed = text.trim();
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      return 'large-json';
+    }
     return 'large-text';
   }
 

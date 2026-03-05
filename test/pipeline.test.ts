@@ -59,6 +59,19 @@ describe('compressResult', () => {
     expect(compressed.content![0].data).toBe(fakeBase64);
   });
 
+  it('applies json-collapse via auto for large JSON arrays', () => {
+    const items = Array.from({ length: 500 }, (_, i) => ({
+      id: i, name: `item-${i}`, email: `user${i}@example.com`,
+      bio: `This is the biography for user number ${i} with some extra text`,
+    }));
+    const bigJson = JSON.stringify(items);
+    const result = { content: [{ type: 'text', text: bigJson }] };
+    const compressed = compressResult('db_query', result, baseConfig);
+    expect(compressed.content![0].text).toContain('[JSON collapsed');
+    expect(compressed.content![0].text).toContain('item-0');
+    expect(compressed.content![0].text).toContain('more items');
+  });
+
   it('dry-run does not modify result', () => {
     const bigText = 'x'.repeat(20000);
     const result = { content: [{ type: 'text', text: bigText }] };
