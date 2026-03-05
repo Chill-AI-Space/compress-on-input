@@ -21,13 +21,13 @@ function extractRefMappings(text: string): RefMapping[] {
   for (const line of lines) {
     // Match patterns like: - button "Submit" [ref=42]
     // or: - link "Home" [ref=7]
-    const match = line.match(/[-–]\s+(\w+)\s+"([^"]+)".*?\[ref=(\d+)\]/);
+    const match = line.match(/[-–]\s+(\w+)\s+"([^"]+)".*?\[ref=([\w]+)\]/);
     if (match) {
       mappings.push({ label: `${match[1]} "${match[2]}"`, ref: match[3] });
       continue;
     }
-    // Match: - "Some text" [ref=N]
-    const match2 = line.match(/[-–]\s+"([^"]+)".*?\[ref=(\d+)\]/);
+    // Match: - "Some text" [ref=X]
+    const match2 = line.match(/[-–]\s+"([^"]+)".*?\[ref=([\w]+)\]/);
     if (match2) {
       mappings.push({ label: `"${match2[1]}"`, ref: match2[2] });
     }
@@ -53,7 +53,7 @@ export function compressDomCleanup(block: ContentBlock): ContentBlock {
   let cleaned = text;
 
   // 1. Strip ref attributes: [ref=123] → remove
-  cleaned = cleaned.replace(/\s*\[ref=\d+\]/g, '');
+  cleaned = cleaned.replace(/\s*\[ref=[\w]+\]/g, '');
 
   // 2. Strip generic ARIA roles
   cleaned = cleaned.replace(/\s*role="(?:generic|none)"/g, '');

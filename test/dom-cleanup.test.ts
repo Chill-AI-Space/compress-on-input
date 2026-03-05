@@ -38,6 +38,17 @@ describe('compressDomCleanup', () => {
     expect(result.text).toContain('line1\n\nline2');
   });
 
+  it('handles alphanumeric refs (Playwright format)', () => {
+    const result = compressDomCleanup({
+      type: 'text',
+      text: '- heading "Example Domain" [ref=e2]\n- link "More info" [ref=s4e]',
+    });
+    expect(result.text).not.toContain('[ref=e2]');
+    expect(result.text).not.toContain('[ref=s4e]');
+    expect(result.text).toContain('heading "Example Domain" → ref=e2');
+    expect(result.text).toContain('link "More info" → ref=s4e');
+  });
+
   it('passes through non-text blocks', () => {
     const block = { type: 'image', data: 'abc' };
     expect(compressDomCleanup(block)).toBe(block);

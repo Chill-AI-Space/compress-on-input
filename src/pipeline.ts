@@ -102,6 +102,14 @@ export function compressResult(
   });
 
   const totalAfter = compressedContent.reduce((sum, b) => sum + blockTokenEstimate(b), 0);
+
+  // If compression made result significantly larger (>10%), return original
+  // Exception: OCR (changes type) and explicit rules (user chose this strategy)
+  if (totalAfter > totalBefore * 1.1 && strategy === 'auto') {
+    log(`${toolName}: compression increased size (${totalBefore} → ${totalAfter}), keeping original`);
+    return result;
+  }
+
   logStats(toolName, totalBefore, totalAfter);
 
   return { ...result, content: compressedContent };
