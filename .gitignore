@@ -1,3 +1,9 @@
 node_modules/
 dist/
 *.tsbuildinfo
+
+# Research data — lives in compress-on-input-research repo
+datasets/
+research/
+results/
+.playwright-mcp/
