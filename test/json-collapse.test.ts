@@ -8,25 +8,24 @@ describe('compressJsonCollapse', () => {
     expect(result.text).toBe('{"name": "test"}');
   });
 
-  it('collapses long arrays to first 3 items + summary', () => {
+  it('renders tabular arrays as MD table', () => {
     const items = Array.from({ length: 50 }, (_, i) => ({ id: i, name: `item-${i}`, email: `${i}@test.com` }));
     const block = { type: 'text', text: JSON.stringify(items) };
     const result = compressJsonCollapse(block, 100); // force compression
-    expect(result.text).toContain('[JSON collapsed');
+    expect(result.text).toContain('[JSON → table');
+    expect(result.text).toContain('| id | name | email |');  // header
+    expect(result.text).toContain('| --- | --- | --- |');     // separator
     expect(result.text).toContain('item-0');
-    expect(result.text).toContain('item-1');
-    expect(result.text).toContain('item-2');
-    expect(result.text).not.toContain('item-49');
-    expect(result.text).toContain('more items');
+    expect(result.text).toContain('item-49');  // MD table keeps all rows (up to 100)
   });
 
-  it('detects homogeneous array schema', () => {
+  it('renders homogeneous array as table with all columns', () => {
     const items = Array.from({ length: 20 }, (_, i) => ({ id: i, name: `n${i}` }));
     const block = { type: 'text', text: JSON.stringify(items) };
     const result = compressJsonCollapse(block, 100);
-    expect(result.text).toContain('same shape');
-    expect(result.text).toContain('id');
-    expect(result.text).toContain('name');
+    expect(result.text).toContain('| id | name |');
+    expect(result.text).toContain('n0');
+    expect(result.text).toContain('n19');
   });
 
   it('strips null and empty values from objects', () => {

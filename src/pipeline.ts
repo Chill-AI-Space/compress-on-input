@@ -2,6 +2,7 @@ import { Config, findRule, Strategy } from './config.js';
 import { classifyContent, ContentType, estimateTokens } from './classifier.js';
 import { compressOCR } from './compressors/ocr.js';
 import { compressDomCleanup } from './compressors/dom-cleanup.js';
+import { compressDomToMarkdown } from './compressors/dom-to-markdown.js';
 import { compressTruncate } from './compressors/truncate.js';
 import { compressJsonCollapse } from './compressors/json-collapse.js';
 import * as fs from 'node:fs';
@@ -99,12 +100,13 @@ async function compressBlock(
   strategy: Strategy,
   config: Config,
   toolContext?: ToolContext,
+  savedFilePath?: string,
 ): Promise<ContentBlock> {
   switch (strategy) {
     case 'ocr':
-      return compressOCR(block, config.ocrEngine);
+      return compressOCR(block, config.ocrEngine, savedFilePath);
     case 'dom-cleanup':
-      return compressDomCleanup(block);
+      return compressDomToMarkdown(block);
     case 'json-collapse':
       return compressJsonCollapse(block, 500); // internal threshold
     case 'truncate':
@@ -114,7 +116,7 @@ async function compressBlock(
     case 'auto': {
       const contentType = classifyContent(block, config.textCompressionThreshold);
       const autoStrategy = strategyForContentType(contentType, config);
-      return compressBlock(block, autoStrategy, config, toolContext);
+      return compressBlock(block, autoStrategy, config, toolContext, savedFilePath);
     }
   }
 }
@@ -124,6 +126,7 @@ export async function compressResult(
   result: CallToolResult,
   config: Config,
   toolContext?: ToolContext,
+  toolInput?: Record<string, unknown>,
 ): Promise<CallToolResult> {
   if (!result.content || !Array.isArray(result.content) || result.content.length === 0) {
     return result;
@@ -159,6 +162,10 @@ export async function compressResult(
   const hasFilePath = resultHasFilePath(result.content);
   const knownScreenshot = isScreenshotTool(toolName);
 
+  // Extract saved file path from tool input (e.g. Playwright's filename param)
+  const savedFilePath = toolInput?.filename as string | undefined
+    ?? toolInput?.path as string | undefined;
+
   // Classify and compress each block
   const compressedContent: ContentBlock[] = [];
   const typeStats: Record<string, { count: number; before: number; after: number; strategy: string }> = {};
@@ -179,7 +186,7 @@ export async function compressResult(
       const effectiveStrategy = blockStrategy === 'auto'
         ? strategyForContentType(contentType, config)
         : blockStrategy;
-      const compressed = await compressBlock(block, blockStrategy, config, toolContext);
+      const compressed = await compressBlock(block, blockStrategy, config, toolContext, savedFilePath);
       const blockAfter = blockTokenEstimate(compressed);
 
       compressedContent.push(compressed);
@@ -214,7 +221,7 @@ export async function compressResult(
     .filter(([k]) => k !== 'small-text')
     .sort((a, b) => b[1].before - a[1].before)[0]?.[0] ?? 'small-text';
 
-  logStats(toolName, totalBefore, totalAfter, strategy, dominantType, startTime);
+  logStats(toolName, totalBefore, totalAfter, strategy, dominantType, startTime, toolInput);
 
   const summary = buildCompressionSummary(toolName, totalBefore, totalAfter, typeStats);
   const summaryBlock: ContentBlock = { type: 'text', text: summary };

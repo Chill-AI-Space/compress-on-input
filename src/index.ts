@@ -5,9 +5,10 @@ import { setVerbose, logAlways, logError } from './logger.js';
 import { startProxy } from './proxy.js';
 import { handleHook } from './hook.js';
 import { installHook, uninstallHook } from './install.js';
+import { runCheck } from './doctor.js';
 
 interface ParsedArgs {
-  mode: 'proxy' | 'hook' | 'install' | 'uninstall' | 'help';
+  mode: 'proxy' | 'hook' | 'install' | 'uninstall' | 'check' | 'help';
   wrap?: string;
   config?: string;
   verbose: boolean;
@@ -15,6 +16,7 @@ interface ParsedArgs {
   ocrEngine?: string;
   textThreshold?: number;
   geminiApiKey?: string;
+  debugLog?: boolean;
 }
 
 function parseArgs(args: string[]): ParsedArgs {
@@ -22,6 +24,7 @@ function parseArgs(args: string[]): ParsedArgs {
 
   if (args[0] === 'install') { result.mode = 'install'; return result; }
   if (args[0] === 'uninstall') { result.mode = 'uninstall'; return result; }
+  if (args[0] === 'check' || args[0] === 'doctor' || args[0] === 'test') { result.mode = 'check'; return result; }
   if (args[0] === 'help' || args[0] === '--help' || args[0] === '-h') { result.mode = 'help'; return result; }
 
   for (let i = 0; i < args.length; i++) {
@@ -31,6 +34,7 @@ function parseArgs(args: string[]): ParsedArgs {
       case '--config': result.config = args[++i]; break;
       case '--verbose': result.verbose = true; break;
       case '--dry-run': result.dryRun = true; break;
+      case '--debug-log': result.debugLog = true; break;
       case '--ocr-engine': result.ocrEngine = args[++i]; break;
       case '--text-threshold': result.textThreshold = parseInt(args[++i], 10); break;
       case '--gemini-api-key': result.geminiApiKey = args[++i]; break;
@@ -63,6 +67,9 @@ MODES:
   Install/uninstall:
     compress-on-input install             Add hook to ~/.claude/settings.json
     compress-on-input uninstall           Remove hook from ~/.claude/settings.json
+
+  Diagnostics:
+    compress-on-input check               Run self-diagnostics (also: doctor, test)
 
 WHAT GETS COMPRESSED:
   Screenshots (base64)   → OCR text extraction (~99% reduction)
@@ -100,12 +107,17 @@ async function main(): Promise<void> {
       uninstallHook();
       break;
 
+    case 'check':
+      await runCheck();
+      break;
+
     case 'hook': {
       const config = loadConfig(args.config);
       if (args.verbose) config.verbose = true;
       if (args.dryRun) config.dryRun = true;
       if (args.ocrEngine) config.ocrEngine = args.ocrEngine as typeof config.ocrEngine;
       if (args.textThreshold) config.textCompressionThreshold = args.textThreshold;
+      if (args.debugLog) config.debugLog = true;
       config.geminiApiKey = args.geminiApiKey ?? process.env.GEMINI_API_KEY ?? config.geminiApiKey;
       await handleHook(config);
       break;

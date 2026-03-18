@@ -95,6 +95,7 @@ function runTesseractOCR(imagePath: string): string | null {
 export function compressOCR(
   block: ContentBlock,
   engine: 'auto' | 'vision' | 'tesseract',
+  savedFilePath?: string,
 ): ContentBlock {
   if (block.type !== 'image' || !block.data) {
     return block;
@@ -115,11 +116,27 @@ export function compressOCR(
       text = runTesseractOCR(tmpFile);
     }
 
-    if (!text) return block;
+    if (!text) {
+      // OCR failed entirely — if we have a saved file path, replace with reference
+      if (savedFilePath) {
+        return {
+          type: 'text',
+          text: `[Screenshot saved to: ${savedFilePath} — OCR could not extract text. No text found on image.]`,
+        };
+      }
+      return block;
+    }
 
     // Quality check: fewer than MIN_MEANINGFUL_CHARS non-whitespace chars → passthrough
     const meaningfulChars = text.replace(/\s/g, '').length;
     if (meaningfulChars < MIN_MEANINGFUL_CHARS) {
+      // No meaningful text — if we have a saved file path, replace with reference
+      if (savedFilePath) {
+        return {
+          type: 'text',
+          text: `[Screenshot saved to: ${savedFilePath} — no text found on image.]`,
+        };
+      }
       return block;
     }
 

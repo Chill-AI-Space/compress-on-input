@@ -16,6 +16,9 @@ npm install -g compress-on-input
 # Add hook to Claude Code (one-time setup)
 compress-on-input install
 
+# Verify everything works
+compress-on-input check
+
 # Restart Claude Code — done!
 ```
 
@@ -25,14 +28,37 @@ That's it. Every tool result is now automatically compressed before entering Cla
 
 MCP tools return massive payloads that burn through Claude's context window:
 
-| Source | Typical Size | With compress-on-input |
-|---|---|---|
-| Screenshot (base64) | ~250k tokens | ~500 tokens (OCR text) |
-| DOM snapshot | 10-50k tokens | 3-15k tokens |
-| API response (500 rows) | 50-100k tokens | 2-5k tokens |
-| Large text/docs | 10-50k tokens | 3-20k tokens |
+| Source | Typical Size | With compress-on-input | Measured Reduction |
+|---|---|---|---|
+| Screenshot (base64) | ~210k chars | ~425 chars (OCR text) | **99.8%** |
+| DOM snapshot | 1-20k chars | 0.8-14k chars | **24%** |
+| API/DB response | 10-16k chars | 80-150 chars | **98.6%** |
+| Large text/docs | 530k chars | 265k chars | **50%** |
 
 Claude's attention is O(n²). More tokens = slower responses, higher cost, earlier compaction. compress-on-input fixes this at the source.
+
+## Real-World Results
+
+Measured over 11 days of daily use (3,257 tool calls, March 2026):
+
+```
+Total input processed:  42.3M chars (~10.6M tokens)
+After compression:       2.8M chars (~696k tokens)
+Overall reduction:       93.4%
+Estimated savings:       ~$148 (Opus pricing) / ~$30 (Sonnet)
+Errors:                  0
+```
+
+| Content Type | Events | Reduction | Avg Latency |
+|---|---|---|---|
+| Screenshots → OCR | 181 | **99.8%** | 735ms |
+| DOM snapshots | 1,761 | **24%** | 20ms |
+| JSON/DB results | 60 | **98.6%** | 1ms |
+| Large text | 1 | **50%** | 58ms |
+
+**0 errors**, **0 data loss**, median latency **15ms**. Compression never makes things worse — fail-safe returns original on any issue.
+
+[**Full performance report with charts and examples →**](https://chillai.space/p/compress-on-input-stats?password=gto42fYJ)
 
 ## How It Works
 
@@ -48,12 +74,12 @@ Works with **all tools** — MCP servers (Playwright, databases, APIs) and built
 
 Each result is automatically routed to the best compressor:
 
-| Content Type | Strategy | What it does | Reduction |
+| Content Type | Strategy | What it does | Measured |
 |---|---|---|---|
-| Screenshots | **OCR** | Apple Vision / Tesseract extracts text from image | ~99% |
-| DOM snapshots | **Cleanup** | Strips noise, builds ref mapping table | 50-70% |
-| Large JSON | **Collapse** | Schema-aware array/object summarization | 60-90% |
-| Large text | **Smart truncate** | BM25-ranked middle + optional Gemini | 60-90% |
+| Screenshots | **OCR** | Apple Vision / Tesseract extracts text from image | **99.8%** |
+| DOM snapshots | **Cleanup** | Strips noise, builds ref mapping table | **15-35%** |
+| Large JSON | **Collapse** | Schema-aware array/object summarization | **98-99%** |
+| Large text | **Smart truncate** | BM25-ranked middle + optional Gemini | **50%+** |
 | Small content | **Passthrough** | Below threshold — untouched | 0% |
 
 ### Smart Text Compression
@@ -88,6 +114,7 @@ Works with **all** tools automatically:
 ```bash
 npm install -g compress-on-input
 compress-on-input install
+compress-on-input check          # verify everything works
 # Restart Claude Code (exit + claude)
 ```
 
@@ -106,6 +133,19 @@ This adds to `~/.claude/settings.json`:
   }
 }
 ```
+
+#### Matcher examples
+
+The `matcher` field is a regex that controls which tools trigger compression:
+
+| Matcher | What gets compressed |
+|---|---|
+| `.*` | All tools (recommended — built-in tools are auto-skipped) |
+| `mcp__.*` | Only MCP tools (Playwright, databases, APIs) |
+| `mcp__playwright__.*` | Only Playwright MCP tools |
+| `mcp__playwright__\|mcp__webflow__` | Specific MCP servers |
+
+> **Note:** Built-in tools (Read, Bash, Grep) are always skipped internally — they don't support output replacement. Using `.*` is safe and recommended.
 
 ### Option B: Proxy mode (wrap specific MCP server)
 
@@ -283,8 +323,14 @@ npm run build      # compile TypeScript
 
 ## Troubleshooting
 
+**First step for any issue:**
+```bash
+compress-on-input check
+```
+Runs 18 self-diagnostic checks: hook installation, binary in PATH, OCR engine, log directories, compression tests, performance benchmarks. Shows exact fix instructions for every failure.
+
 **Hook not firing?**
-- Check `~/.claude/settings.json` has the PostToolUse hook
+- Run `compress-on-input check` — it checks settings.json automatically
 - Restart Claude Code after installing (`/exit` + `claude`)
 - Run `compress-on-input --hook --verbose` manually with test input
 

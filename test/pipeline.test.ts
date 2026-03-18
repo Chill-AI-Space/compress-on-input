@@ -69,9 +69,9 @@ describe('compressResult', () => {
     const compressed = await compressResult('db_query', result, baseConfig);
     const text = allText(compressed);
     expect(text).toContain('[compress-on-input:');
-    expect(text).toContain('[JSON collapsed');
+    expect(text).toContain('[JSON → table');
     expect(text).toContain('item-0');
-    expect(text).toContain('more items');
+    expect(text).toContain('| id |');  // table header
   });
 
   it('respects jsonCollapse=false', async () => {

@@ -1,18 +1,8 @@
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import * as os from 'node:os';
 import { Config, loadConfig } from './config.js';
 import { compressResult } from './pipeline.js';
-import { setVerbose, log, logError } from './logger.js';
+import { setVerbose, setDebugLog, log, logError, logSkip, logDebug, preview } from './logger.js';
 import { ToolContext } from './query-builder.js';
 import { recordCall, getRecentCalls } from './session.js';
-
-const DEBUG_LOG = path.join(os.homedir(), '.local', 'share', 'compress-on-input', 'debug.log');
-function dbg(msg: string): void {
-  try {
-    fs.appendFileSync(DEBUG_LOG, `${new Date().toISOString()} ${msg}\n`);
-  } catch { /* ignore */ }
-}
 
 /**
  * PostToolUse hook handler for Claude Code.
@@ -99,11 +89,17 @@ interface ContentBlock {
   mimeType?: string;
 }
 
+function blockSize(b: ContentBlock): number {
+  if (b.type === 'image' && b.data) return Math.ceil(b.data.length / 4);
+  return b.text ? Math.ceil(Buffer.byteLength(b.text, 'utf-8') / 4) : 0;
+}
+
 export async function handleHook(configOrPath?: Config | string): Promise<void> {
   const config = typeof configOrPath === 'object' && configOrPath !== null
     ? configOrPath
     : loadConfig(configOrPath);
   setVerbose(config.verbose);
+  setDebugLog(config.debugLog);
 
   const chunks: Buffer[] = [];
   for await (const chunk of process.stdin) {
@@ -111,29 +107,19 @@ export async function handleHook(configOrPath?: Config | string): Promise<void> 
   }
   const rawInput = Buffer.concat(chunks).toString('utf-8').trim();
 
-  dbg(`hook started, stdin chunks=${chunks.length}, rawInput=${rawInput.length} bytes`);
-
   if (!rawInput) {
-    dbg('empty stdin, exit');
     process.exit(0);
   }
 
   let input: HookInput;
   try {
     input = JSON.parse(rawInput);
-  } catch (e) {
-    dbg(`JSON parse error: ${e}`);
+  } catch {
     logError('Failed to parse hook input JSON');
     process.exit(0);
   }
 
   const { tool_name, tool_input, tool_response } = input;
-
-  dbg(`tool=${tool_name} session=${input.session_id} transcript=${input.transcript_path} response_type=${typeof tool_response} response_is_array=${Array.isArray(tool_response)}`);
-  if (tool_response && typeof tool_response === 'object') {
-    const keys = Object.keys(tool_response as Record<string, unknown>).slice(0, 5);
-    dbg(`response keys=[${keys}] ${Array.isArray(tool_response) ? `len=${(tool_response as unknown[]).length}` : ''}`);
-  }
 
   log(`Hook: ${tool_name}`);
 
@@ -142,26 +128,26 @@ export async function handleHook(configOrPath?: Config | string): Promise<void> 
 
   // Skip built-in tools — they don't support updatedMCPToolOutput
   if (!isMCPTool(tool_name)) {
-    dbg(`${tool_name}: built-in tool, skipping`);
     log(`Hook: ${tool_name} — built-in tool, skipping`);
     process.exit(0);
   }
 
   const normalized = normalizeResponse(tool_response);
   if (!normalized) {
-    dbg(`${tool_name}: normalizeResponse returned null, exit`);
     log(`Hook: ${tool_name} — no content to compress`);
+    logSkip(shortName, 'empty-response', 0, tool_input, {
+      session_id: input.session_id,
+      full_tool_name: tool_name,
+    });
     process.exit(0);
   }
 
-  dbg(`${tool_name}: normalized blocks=${normalized.content.length} types=[${normalized.content.map(b => b.type)}]`);
-  for (const b of normalized.content) {
-    const keys = Object.keys(b);
-    const hasData = 'data' in b;
-    const dataLen = b.data ? b.data.length : 0;
-    const textLen = b.text ? b.text.length : 0;
-    dbg(`  block: type=${b.type} keys=[${keys}] hasData=${hasData} dataLen=${dataLen} textLen=${textLen}`);
-  }
+  const blockTypes = normalized.content.map(b => b.type);
+  const blockSizes = normalized.content.map(blockSize);
+  const originalPreview = normalized.content
+    .filter(b => b.type === 'text')
+    .map(b => b.text?.slice(0, 300))
+    .join('\n---\n');
 
   const toolContext: ToolContext = {
     toolName: shortName,
@@ -171,25 +157,53 @@ export async function handleHook(configOrPath?: Config | string): Promise<void> 
 
   let compressed;
   try {
-    compressed = await compressResult(shortName, normalized, config, toolContext);
-    dbg(`${tool_name}: compression done`);
+    compressed = await compressResult(shortName, normalized, config, toolContext, tool_input);
   } catch (e) {
-    dbg(`${tool_name}: compression THREW: ${e}`);
+    logError(`Compression threw for ${tool_name}: ${e}`);
     process.exit(0);
   }
 
   if (compressed === normalized) {
-    dbg(`${tool_name}: no change, exit`);
     log(`Hook: ${tool_name} — no compression needed`);
+    const totalTokens = blockSizes.reduce((a, b) => a + b, 0);
+    logSkip(shortName, 'no-change', totalTokens, tool_input, {
+      session_id: input.session_id,
+      full_tool_name: tool_name,
+      block_types: blockTypes,
+      block_sizes: blockSizes,
+      original_preview: preview(originalPreview),
+    });
     process.exit(0);
   }
 
-  dbg(`${tool_name}: outputting result`);
+  // Debug log for compressed results — includes before/after previews
+  const compressedPreview = compressed.content
+    ?.filter(b => b.type === 'text')
+    .map(b => b.text?.slice(0, 300))
+    .join('\n---\n');
+
+  logDebug({
+    ts: new Date().toISOString(),
+    tool: shortName,
+    full_tool_name: tool_name,
+    session_id: input.session_id,
+    strategy: 'auto',
+    before: blockSizes.reduce((a, b) => a + b, 0),
+    after: compressed.content?.reduce((s, b) => s + blockSize(b), 0) ?? 0,
+    reduction: '',
+    duration_ms: 0,
+    action: 'compressed-detail',
+    tool_input: tool_input,
+    block_types: blockTypes,
+    block_sizes: blockSizes,
+    original_preview: preview(originalPreview),
+    compressed_preview: preview(compressedPreview),
+  });
 
   const output = {
     hookSpecificOutput: {
       hookEventName: 'PostToolUse',
-      updatedMCPToolOutput: compressed,
+      updatedMCPToolOutput: compressed.content,
     },
   };
   process.stdout.write(JSON.stringify(output) + '\n');

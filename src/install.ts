@@ -81,7 +81,11 @@ export function installHook(): void {
   saveSettings(settings);
   logAlways('compress-on-input hook installed in ~/.claude/settings.json');
   logAlways('Matcher: .* (all tool results)');
-  logAlways('Restart Claude Code for the hook to take effect.');
+  logAlways('');
+  logAlways('Next steps:');
+  logAlways('  1. Run: compress-on-input check    (verify everything works)');
+  logAlways('  2. Restart Claude Code (/exit + claude)');
+
 }
 
 export function uninstallHook(): void {
