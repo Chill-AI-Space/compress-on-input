@@ -31,7 +31,7 @@ MCP tools return massive payloads that burn through Claude's context window:
 | Source | Typical Size | With compress-on-input | Measured Reduction |
 |---|---|---|---|
 | Screenshot (base64) | ~210k chars | ~425 chars (OCR text) | **99.8%** |
-| DOM snapshot | 1-20k chars | 0.8-14k chars | **24%** |
+| DOM snapshot | 1-17k chars | 0.1-8k chars | **50%** |
 | API/DB response | 10-16k chars | 80-150 chars | **98.6%** |
 | Large text/docs | 530k chars | 265k chars | **50%** |
 
@@ -52,7 +52,7 @@ Errors:                  0
 | Content Type | Events | Reduction | Avg Latency |
 |---|---|---|---|
 | Screenshots → OCR | 181 | **99.8%** | 735ms |
-| DOM snapshots | 1,761 | **24%** | 20ms |
+| DOM snapshots | 1,761 | **50%** | 20ms |
 | JSON/DB results | 60 | **98.6%** | 1ms |
 | Large text | 1 | **50%** | 58ms |
 
@@ -77,7 +77,7 @@ Each result is automatically routed to the best compressor:
 | Content Type | Strategy | What it does | Measured |
 |---|---|---|---|
 | Screenshots | **OCR** | Apple Vision / Tesseract extracts text from image | **99.8%** |
-| DOM snapshots | **Cleanup** | Strips noise, builds ref mapping table | **15-35%** |
+| DOM snapshots | **DOM→Markdown** | Converts accessibility tree to clean Markdown | **40-55%** |
 | Large JSON | **Collapse** | Schema-aware array/object summarization | **98-99%** |
 | Large text | **Smart truncate** | BM25-ranked middle + optional Gemini | **50%+** |
 | Small content | **Passthrough** | Below threshold — untouched | 0% |
