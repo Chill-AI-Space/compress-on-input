@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { execFileSync } from 'node:child_process';
+import * as os from 'node:os';
+import * as crypto from 'node:crypto';
 
 const CACHE_DIR = join(process.env.HOME || '/Users/vova', '.cache', 'compress-on-input');
 
@@ -20,8 +21,7 @@ function findPackageRoot(): string {
 function getSourceHash(): string {
   const srcPath = join(findPackageRoot(), 'src', 'ocr', 'vision.swift');
   if (!existsSync(srcPath)) return '';
-  const crypto = require('node:crypto');
-  const content = require('node:fs').readFileSync(srcPath);
+  const content = readFileSync(srcPath);
   return crypto.createHash('md5').update(content).digest('hex').slice(0, 12);
 }
 
@@ -37,7 +37,7 @@ function ensureVisionBinary(): string | null {
   if (!existsSync(srcPath)) return null;
   
   try {
-    require('node:fs').mkdirSync(CACHE_DIR, { recursive: true });
+    mkdirSync(CACHE_DIR, { recursive: true });
     execFileSync('swiftc', ['-O', '-o', versionedBin, srcPath], { timeout: 30000 });
     return versionedBin;
   } catch {
@@ -46,22 +46,53 @@ function ensureVisionBinary(): string | null {
 }
 
 function ocrImage(imagePath: string): string {
+  // Check file exists
+  if (!existsSync(imagePath)) {
+    throw new Error(`File not found: ${imagePath}`);
+  }
+
+  const ext = imagePath.toLowerCase().split('.').pop();
+  const isJpeg = ext === 'jpg' || ext === 'jpeg';
+  
   const bin = ensureVisionBinary();
   
   if (bin) {
     try {
-      const result = execFileSync(bin, [imagePath], { timeout: 10000 });
+      // For JPEG, Vision doesn't support it directly - convert to PNG first
+      const inputPath = isJpeg ? convertToPng(imagePath) : imagePath;
+      const result = execFileSync(bin, [inputPath], { timeout: 10000 });
       const text = result.toString('utf-8').trim();
+      
+      if (isJpeg && inputPath !== imagePath) {
+        try { unlinkSync(inputPath); } catch {}
+      }
+      
       if (text && text.length > 10) return text;
     } catch {}
   }
   
   try {
-    const result = execFileSync('tesseract', [imagePath, 'stdout', '-l', 'eng+rus', '--psm', '1'], { timeout: 10000 });
+    const inputPath = isJpeg ? convertToPng(imagePath) : imagePath;
+    const result = execFileSync('tesseract', [inputPath, 'stdout', '-l', 'eng+rus', '--psm', '1'], { timeout: 10000 });
+    
+    if (isJpeg && inputPath !== imagePath) {
+      try { unlinkSync(inputPath); } catch {}
+    }
+    
     return result.toString('utf-8').trim();
   } catch (err) {
     throw new Error(`OCR failed: ${err}`);
   }
+}
+
+function convertToPng(inputPath: string): string {
+  const tmpDir = join(os.tmpdir(), `ocr-${Date.now()}`);
+  mkdirSync(tmpDir, { recursive: true });
+  const outputPath = join(tmpDir, 'converted.png');
+  
+  execFileSync('sips', ['-s', 'format', 'png', inputPath, '--out', outputPath], { timeout: 5000 });
+  
+  return outputPath;
 }
 
 interface JsonRpcMessage {
