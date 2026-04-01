@@ -6,9 +6,10 @@ import { startProxy } from './proxy.js';
 import { handleHook } from './hook.js';
 import { installHook, uninstallHook } from './install.js';
 import { runCheck } from './doctor.js';
+import { startMcpServer } from './mcp-server.js';
 
 interface ParsedArgs {
-  mode: 'proxy' | 'hook' | 'install' | 'uninstall' | 'check' | 'help';
+  mode: 'proxy' | 'hook' | 'install' | 'uninstall' | 'check' | 'serve' | 'help';
   wrap?: string;
   config?: string;
   verbose: boolean;
@@ -30,6 +31,7 @@ function parseArgs(args: string[]): ParsedArgs {
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
       case '--hook': result.mode = 'hook'; break;
+      case '--serve': result.mode = 'serve'; break;
       case '--wrap': result.wrap = args[++i]; break;
       case '--config': result.config = args[++i]; break;
       case '--verbose': result.verbose = true; break;
@@ -109,6 +111,10 @@ async function main(): Promise<void> {
 
     case 'check':
       await runCheck();
+      break;
+
+    case 'serve':
+      startMcpServer();
       break;
 
     case 'hook': {
