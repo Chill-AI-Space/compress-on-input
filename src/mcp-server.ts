@@ -100,7 +100,7 @@ function handleRequest(msg: JsonRpcMessage): void {
         tools: [
           {
             name: 'ocr_image',
-            description: 'Extract text from images using Apple Vision (macOS) or Tesseract OCR. Supports PNG, JPG, PDF.',
+            description: 'Extract text from images using Apple Vision (macOS) or Tesseract OCR. Supports PNG, JPG, JPEG, PDF, WebP, HEIC.',
             inputSchema: {
               type: 'object',
               properties: {

@@ -9,6 +9,7 @@
 
 ## Quick Start
 
+### Claude Code
 ```bash
 # Install globally
 npm install -g compress-on-input
@@ -21,6 +22,26 @@ compress-on-input check
 
 # Restart Claude Code — done!
 ```
+
+### opencode
+```bash
+# Install globally
+npm install -g compress-on-input
+
+# Add to opencode config (~/.config/opencode/opencode.json):
+{
+  "mcp": {
+    "compress-on-input": {
+      "type": "local",
+      "command": ["compress-on-input-mcp"]
+    }
+  }
+}
+
+# Restart opencode
+```
+
+Available tools: `ocr_image` — extract text from images (PNG, JPG, PDF, WebP)
 
 That's it. Every tool result is now automatically compressed before entering Claude's context.
 
