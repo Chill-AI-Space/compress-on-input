@@ -67,7 +67,14 @@ function ocrImage(imagePath: string): string {
         try { unlinkSync(inputPath); } catch {}
       }
       
-      if (text && text.length > 10) return text;
+      if (text && text.length > 0) {
+        // Check if meaningful text (7+ non-whitespace chars)
+        const meaningfulChars = text.replace(/\s/g, '').length;
+        if (meaningfulChars < 7) {
+          return `[OCR found ${text.length} chars but likely not meaningful text: "${text}"]`;
+        }
+        return text;
+      }
     } catch {}
   }
   
@@ -79,10 +86,17 @@ function ocrImage(imagePath: string): string {
       try { unlinkSync(inputPath); } catch {}
     }
     
-    return result.toString('utf-8').trim();
-  } catch (err) {
-    throw new Error(`OCR failed: ${err}`);
-  }
+    const text = result.toString('utf-8').trim();
+    if (text && text.length > 0) {
+      const meaningfulChars = text.replace(/\s/g, '').length;
+      if (meaningfulChars < 7) {
+        return `[OCR found ${text.length} chars but likely not meaningful text: "${text}"]`;
+      }
+      return text;
+    }
+  } catch (err) {}
+  
+  throw new Error(`OCR found no text in image`);
 }
 
 function convertToPng(inputPath: string): string {
