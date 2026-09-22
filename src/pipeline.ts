@@ -45,6 +45,7 @@ function strategyForContentType(contentType: ContentType, config: Config): Strat
 
 const FILE_PATH_PATTERN = /(?:]\(|href=["']?|src=["']?)?\/?(?:\/[\w./-]+\.(?:png|jpg|jpeg|gif|webp|svg|bmp|tiff))/i;
 const SCREENSHOT_TOOLS = ['browser_take_screenshot', 'browser_screenshot', 'screenshot', 'take_screenshot'];
+const SCREENSHOT_ACTIONS = new Set(['screenshot', 'zoom']);
 
 function resultHasFilePath(content: ContentBlock[]): boolean {
   return content.some(
@@ -52,8 +53,36 @@ function resultHasFilePath(content: ContentBlock[]): boolean {
   );
 }
 
-function isScreenshotTool(toolName: string): boolean {
-  return SCREENSHOT_TOOLS.some((t) => toolName.includes(t));
+function hasScreenshotAction(input: unknown): boolean {
+  if (!input || typeof input !== 'object') return false;
+  const action = (input as Record<string, unknown>).action;
+  return typeof action === 'string' && SCREENSHOT_ACTIONS.has(action);
+}
+
+/**
+ * Decide whether an image block is a UI screenshot worth OCR-ing.
+ *
+ * Two independent signals: the tool is a known screenshot tool by name, or the
+ * tool input explicitly requested a screenshot/zoom. The latter covers the
+ * Claude-in-Chrome tools (`computer`, `browser_batch`) whose names don't contain
+ * "screenshot" but whose images are all UI captures.
+ */
+export function isScreenshotTool(toolName: string, toolInput?: Record<string, unknown>): boolean {
+  if (SCREENSHOT_TOOLS.some((t) => toolName.includes(t))) return true;
+  if (!toolInput) return false;
+
+  if (hasScreenshotAction(toolInput)) return true;
+
+  // browser_batch: actions: [{ name: 'computer', input: { action: 'screenshot' } }, ...]
+  const actions = toolInput.actions;
+  if (Array.isArray(actions)) {
+    return actions.some((entry) => {
+      if (!entry || typeof entry !== 'object') return false;
+      return hasScreenshotAction((entry as Record<string, unknown>).input);
+    });
+  }
+
+  return false;
 }
 
 function blockTokenEstimate(block: ContentBlock): number {
@@ -160,7 +189,7 @@ export async function compressResult(
   }
 
   const hasFilePath = resultHasFilePath(result.content);
-  const knownScreenshot = isScreenshotTool(toolName);
+  const knownScreenshot = isScreenshotTool(toolName, toolInput);
 
   // Extract saved file path from tool input (e.g. Playwright's filename param)
   const savedFilePath = toolInput?.filename as string | undefined
